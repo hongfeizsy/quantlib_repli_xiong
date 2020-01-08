@@ -50,6 +50,7 @@ int main()
 		std::make_pair(Period(25, Years), boost::make_shared<SimpleQuote>(0.03801)),
 		std::make_pair(Period(30, Years), boost::make_shared<SimpleQuote>(0.03747))
 	};
+
 	DayCounter dayCounter = Actual360();
 	std::vector<boost::shared_ptr<RateHelper>> eoniaInstruments;
 	eoniaInstruments.push_back(boost::make_shared<DepositRateHelper>(Handle<Quote>(depoQuotes[0].second), 
@@ -57,19 +58,26 @@ int main()
 
 	boost::shared_ptr<Eonia> eonia = boost::make_shared<Eonia>();
 	for (int i = 0; i < oisQuotes.size(); i++) {
-		eoniaInstruments.push_back(boost::make_shared<OISRateHelper>(fixingDays, oisQuotes[i].first, 
-			Handle<Quote>(oisQuotes[i].second), eonia));
-		//std::cout << i << ", " << timer.elapsed() << " seconds" << std::endl;
+		eoniaInstruments.push_back(boost::make_shared<OISRateHelper>(fixingDays, oisQuotes[i].first,
+			// 'telescopicValueDates' should be set to true to speed up the calculation. 'paymentLag' should be set to zero
+			Handle<Quote>(oisQuotes[i].second), eonia, Handle<YieldTermStructure>(), true, 0));
 	}
 
-	//boost::shared_ptr<YieldTermStructure> eoniaTermStructure =
-	//	boost::make_shared<PiecewiseYieldCurve<Discount, LogLinear>>(settlementDate, 
-	//		eoniaInstruments, dayCounter, 1.0e-15);
-	//eoniaTermStructure->enableExtrapolation();
+	boost::shared_ptr<YieldTermStructure> eoniaTermStructure =
+		boost::make_shared<PiecewiseYieldCurve<Discount, LogLinear>>(settlementDate, 
+			eoniaInstruments, dayCounter, 1.0e-15);
+	eoniaTermStructure->enableExtrapolation();
 
-	//RelinkableHandle<YieldTermStructure> discountingTermStructure;
-	//discountingTermStructure.linkTo(eoniaTermStructure);
-	//std::cout << "discounting factor: " << eoniaTermStructure->discount(settlementDate + 30 * Years) << std::endl;
+	RelinkableHandle<YieldTermStructure> discountingTermStructure;
+	discountingTermStructure.linkTo(eoniaTermStructure);
+	std::cout << "discounting factor: " << eoniaTermStructure->discount(settlementDate + 30 * Years) << std::endl;
+	for (Size i = 0; i < eoniaInstruments.size(); i++) {
+		Date maturityDate = eoniaInstruments[i]->maturityDate() + Period(1, Days);
+		std::cout << maturityDate.weekday() << ", "
+			<< maturityDate << " discount factor: "
+			<< eoniaTermStructure->discount(eoniaInstruments[i]->maturityDate())
+			<< std::endl;;
+	}
 
 	std::cout << "Computation time: " << timer.elapsed() << " seconds." << std::endl;
 	return 0;
